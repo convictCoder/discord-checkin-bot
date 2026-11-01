@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import schedule from "node-schedule";
 import "dotenv/config";
+import { StandupCopilot } from "./standup.js";
 
 export default class Bot {
   constructor(
@@ -16,8 +17,8 @@ export default class Bot {
     checkInChannelId,
     questions
   ) {
-    if (!checkInChannelId) {
-      throw new Error("CHECK_IN_CHANNEL_ID is required");
+    if (!checkInChannelId && !process.env.STANDUP_CHANNEL_ID) {
+      throw new Error("CHECK_IN_CHANNEL_ID or STANDUP_CHANNEL_ID is required");
     }
     this.token = token;
     this.channelId = channelId;
@@ -31,22 +32,35 @@ export default class Bot {
       partials: [Partials.Channel],
       intents: [
         GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.DirectMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessageReactions,
       ],
     });
+    this.standup = process.env.STANDUP_CHANNEL_ID ? new StandupCopilot(this.client, {
+      channelId: process.env.STANDUP_CHANNEL_ID,
+      timezone: process.env.STANDUP_TIMEZONE || "America/Los_Angeles",
+    }) : null;
   }
 
   async run() {
     try {
+      this.client.on("messageCreate", (message) => {
+        this.standup?.handleMessage(message).catch(error => {
+          console.error("Standup message failed:", error.message);
+        });
+      });
       this.client.once("ready", () => {
         console.log("Bot is ready!");
-        this.scheduleQuestions();
-        this.scheduleDailyCheckin();
+        if (this.channelId && this.responseChannelId) {
+          this.scheduleQuestions().catch(error => console.error("Questions schedule failed:", error));
+        }
+        if (this.checkInChannelId) this.scheduleDailyCheckin();
+        this.standup?.start();
         this.client.user.setPresence({
-          activities: [{ name: "Tracking Check-ins", type: "Watching" }],
+          activities: [{ name: "Tracking Check-ins", type: ActivityType.Watching }],
           status: "online",
         });
       });
@@ -58,6 +72,7 @@ export default class Bot {
       await this.client.login(this.token);
     } catch (error) {
       console.error("Failed to start bot:", error);
+      throw error;
     }
   }
 
@@ -266,7 +281,9 @@ export default class Bot {
   }
 
   cleanup() {
+    this.standup?.cleanup();
     this.scheduledJobs.forEach((job) => job.cancel());
     this.client.destroy();
   }
 }
+
