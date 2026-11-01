@@ -1,0 +1,28 @@
+services:
+  - type: worker
+    name: discord-standup-copilot
+    runtime: node
+    plan: starter
+    region: virginia
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: STANDUP_CHANNEL_ID
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_URL
+        value: https://evxsybqpsmtmlkppffrb.supabase.co
+      - key: STANDUP_STORAGE
+        value: supabase
+      - key: STANDUP_TIMEZONE
+        value: America/Los_Angeles
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash

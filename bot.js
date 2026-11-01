@@ -8,6 +8,7 @@ import {
 import schedule from "node-schedule";
 import "dotenv/config";
 import { StandupCopilot } from "./standup.js";
+import { createStore } from "./storage.js";
 
 export default class Bot {
   constructor(
@@ -42,6 +43,7 @@ export default class Bot {
     this.standup = process.env.STANDUP_CHANNEL_ID ? new StandupCopilot(this.client, {
       channelId: process.env.STANDUP_CHANNEL_ID,
       timezone: process.env.STANDUP_TIMEZONE || "America/Los_Angeles",
+      store: createStore(),
     }) : null;
   }
 
@@ -52,8 +54,16 @@ export default class Bot {
           console.error("Standup message failed:", error.message);
         });
       });
-      this.client.once("ready", () => {
+      this.client.once("ready", async () => {
         console.log("Bot is ready!");
+        try {
+          await this.standup?.restore();
+        } catch (error) {
+          console.error("Could not restore standup storage:", error.message);
+          this.cleanup();
+          process.exitCode = 1;
+          return;
+        }
         if (this.channelId && this.responseChannelId) {
           this.scheduleQuestions().catch(error => console.error("Questions schedule failed:", error));
         }

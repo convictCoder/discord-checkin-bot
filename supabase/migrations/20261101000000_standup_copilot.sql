@@ -26,3 +26,29 @@ create table if not exists public.guild_subscriptions (
 alter table public.standup_records enable row level security;
 alter table public.guild_subscriptions enable row level security;
 
+-- Nullable additions retain any legacy records without guessing their local day.
+alter table public.standup_records
+  add column if not exists channel_id text,
+  add column if not exists standup_day date,
+  add column if not exists user_tag text,
+  add column if not exists updated_at timestamptz not null default now();
+
+create unique index if not exists standup_records_daily_user_idx
+  on public.standup_records (guild_id, channel_id, standup_day, discord_user_id);
+
+create table if not exists public.standup_sessions (
+  guild_id text not null,
+  channel_id text not null,
+  standup_day date not null,
+  thread_id text not null,
+  primary key (guild_id, channel_id, standup_day)
+);
+alter table public.standup_sessions enable row level security;
+
+-- Explicit grants support projects where new tables aren't exposed by default.
+grant usage on schema public to service_role;
+grant select, insert, update on public.standup_records to service_role;
+grant select on public.guild_subscriptions to service_role;
+grant select, insert, update on public.standup_sessions to service_role;
+revoke all on public.standup_records, public.guild_subscriptions, public.standup_sessions from anon, authenticated;
+

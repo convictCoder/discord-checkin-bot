@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import schedule from "node-schedule";
 import { parseStandupResponse, generateDailyDigest } from "./ai.js";
+import { MemoryStore, canUse } from "./storage.js";
 
 export const clip = (text, max) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
 export const dayKey = (date, timezone) => new Intl.DateTimeFormat("en-CA", {
@@ -9,7 +10,7 @@ export const dayKey = (date, timezone) => new Intl.DateTimeFormat("en-CA", {
 const colors = { LOW: 0x57F287, MEDIUM: 0xFEE75C, HIGH: 0xED4245 };
 
 export class StandupCopilot {
-  constructor(client, { channelId, timezone = "America/Los_Angeles", parse = parseStandupResponse, digest = generateDailyDigest, now = () => new Date() }) {
+  constructor(client, { channelId, timezone = "America/Los_Angeles", parse = parseStandupResponse, digest = generateDailyDigest, now = () => new Date(), store = new MemoryStore() }) {
     this.client = client;
     this.channelId = channelId;
     this.timezone = timezone;
@@ -21,6 +22,14 @@ export class StandupCopilot {
     this.threads = new Map();
     this.pending = new Set();
     this.jobs = [];
+    this.store = store;
+  }
+
+  async restore() {
+    const channel = await this.channel();
+    const day = dayKey(this.now(), this.timezone);
+    const session = await this.store.session(channel.guildId, this.channelId, day);
+    if (session?.threadId) this.threads.set(day, session.threadId);
   }
 
   async channel() {
@@ -46,10 +55,17 @@ export class StandupCopilot {
       for (const key of map.keys()) if (key !== day) map.delete(key);
     }
     const channel = await this.channel();
+    if (!canUse(await this.store.subscription(channel.guildId), "intake")) return;
+    const session = await this.store.session(channel.guildId, this.channelId, day);
+    if (session?.threadId) {
+      this.threads.set(day, session.threadId);
+      return;
+    }
     const message = await channel.send("☀️ **Standup Time!** Share what you finished, what you’re working on, blockers, and any commitments or deadlines. Use `!standup your update` here, or reply in today’s thread. Updates are sent to Gemini for analysis.");
     try {
       const thread = await message.startThread({ name: `Standup ${day}`, autoArchiveDuration: 1440 });
       this.threads.set(day, thread.id);
+      await this.store.saveSession({ guildId: channel.guildId, channelId: this.channelId, day, threadId: thread.id });
     } catch (error) {
       console.error("Standup thread unavailable; use !standup in the channel:", error.message);
     }
@@ -71,16 +87,21 @@ export class StandupCopilot {
     this.pending.add(key);
     let analysis;
     try {
+      if (!canUse(await this.store.subscription(message.guildId), "intake")) {
+        return await reply({ content: "Standup AI is disabled for this server's subscription." });
+      }
       analysis = await this.parse(message.author.username, raw);
       if (day !== dayKey(this.now(), this.timezone)) {
         return await reply({ content: "The standup day changed while analyzing your update. Please submit it again." });
       }
+      await this.store.saveEntry({ user: message.author.username, userId: message.author.id,
+        guildId: message.guildId, channelId: this.channelId, day, raw, analysis });
       if (!this.entries.has(day)) this.entries.set(day, new Map());
       // Latest update per person replaces earlier submissions for the daily digest.
       this.entries.get(day).set(key, { user: message.author.username, userId: message.author.id, guildId: message.guildId, raw, analysis });
     } catch (error) {
-      console.error("Standup analysis failed:", error.message);
-      return await reply({ content: "Could not analyze your standup. Please try again shortly." });
+      console.error("Standup processing failed:", error.message);
+      return await reply({ content: "Could not analyze or save your standup. Please try again shortly." });
     } finally {
       this.pending.delete(key);
     }
@@ -100,7 +121,8 @@ export class StandupCopilot {
   async publishDigest() {
     const day = dayKey(this.now(), this.timezone);
     const channel = await this.channel();
-    const entries = [...(this.entries.get(day)?.values() || [])].filter(entry => entry.guildId === channel.guildId);
+    if (!canUse(await this.store.subscription(channel.guildId), "digest")) return;
+    const entries = await this.store.dailyEntries(channel.guildId, this.channelId, day);
     if (!entries.length) return;
     const digest = await this.digest(entries);
     const embed = new EmbedBuilder().setTitle("📋 Daily Team Alignment Digest")
