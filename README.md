@@ -51,7 +51,7 @@ For the original weekday 8 AM Los Angeles DM questionnaires, configure both `CHA
 
 ## Database migration
 
-Apply `supabase/migrations/20261101000000_standup_copilot.sql` in the Supabase SQL editor or migration workflow. It preserves the requested records and subscriptions tables and adds daily-user uniqueness, channel/day/user metadata, and thread sessions. Existing legacy records remain intact; their unknown local-day/channel values stay null and are excluded from new daily digests.
+Apply `supabase/migrations/20261102064033_standup_copilot.sql` in the Supabase SQL editor or migration workflow. It preserves the requested records and subscriptions tables and adds daily-user uniqueness, channel/day/user metadata, and thread sessions. Existing legacy records remain intact; their unknown local-day/channel values stay null and are excluded from new daily digests.
 
 RLS is enabled on all bot tables, client roles have no access, and only the backend service role receives the minimum read/write grants needed by the bot. Provision subscription rows through a trusted administrative connection.
 

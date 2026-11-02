@@ -14,7 +14,7 @@ Never paste tokens into Discord, issues, pull requests, or chat. Enter them dire
 
 ## Database and service
 
-1. Ensure `supabase/migrations/20261101000000_standup_copilot.sql` has been applied to the selected project. If it was already applied during setup, do not apply it again through a migration manager; inspect the migration history first. The SQL itself is repeatable.
+1. Ensure `supabase/migrations/20261102064033_standup_copilot.sql` has been applied to the selected project. If it was already applied during setup, do not apply it again through a migration manager; inspect the migration history first. The SQL itself is repeatable.
 2. After the pull request is merged, sign in to [Render](https://dashboard.render.com/) and choose **New → Blueprint**. Connect `convictCoder/discord-checkin-bot`, choose the merged branch, and review the `render.yaml` configuration.
 3. Enter `DISCORD_TOKEN`, `GEMINI_API_KEY`, `STANDUP_CHANNEL_ID`, and `SUPABASE_SECRET_KEY` when prompted. Confirm the Supabase URL and choose your preferred `STANDUP_TIMEZONE`.
 4. Review the paid worker plan, then create the Blueprint. Keep exactly one worker instance running. There is no public web endpoint to configure.
@@ -29,3 +29,9 @@ The default tier is Free, which enables standup parsing but not team digests. To
 Disable the subscription row and submit again to verify that AI is blocked. Re-enable it when finished. Do this in a test guild before inviting a wider team.
 
 Live verification needs your credentials and server access. Unit tests use mocks and cannot verify Discord permissions, Google quota, or the worker's network connection.
+
+## Setup status
+
+The selected Supabase project was restored and migration `20261102064033_standup_copilot` applied on November 2, 2026. A transactional backend-role smoke test verified record/session writes and subscription reads, then rolled back all temporary data. Supabase's security advisor returned informational [RLS enabled without policies](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy) notices; this is intentional for backend-only tables with client-role privileges revoked.
+
+The Render service has not been created. Discord/Gemini credentials still need to be supplied directly in the hosting dashboard before deployment and live testing.
