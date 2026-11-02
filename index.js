@@ -1,16 +1,20 @@
-﻿import Bot from "./bot.js";
+import Bot from "./bot.js";
 import dotenv from "dotenv";
 
 // Load environment variables
 dotenv.config();
 
 // Validate required environment variables
-const requiredEnvVars = [
-  "DISCORD_TOKEN",
-  "CHANNEL_ID",
-  "RESPONSE_CHANNEL_ID",
-  "CHECK_IN_CHANNEL_ID",
-];
+const requiredEnvVars = ["DISCORD_TOKEN"];
+if (process.env.STANDUP_CHANNEL_ID) {
+  requiredEnvVars.push("GEMINI_API_KEY");
+} else {
+  requiredEnvVars.push("CHANNEL_ID", "RESPONSE_CHANNEL_ID", "CHECK_IN_CHANNEL_ID");
+}
+if (Boolean(process.env.CHANNEL_ID) !== Boolean(process.env.RESPONSE_CHANNEL_ID)) {
+  console.error("CHANNEL_ID and RESPONSE_CHANNEL_ID must be configured together");
+  process.exit(1);
+}
 
 const missingEnvVars = requiredEnvVars.filter(
   (varName) => !process.env[varName]
@@ -39,7 +43,7 @@ const bot = new Bot(
 );
 
 // Handle shutdown gracefully
-process.on("SIGINT", async () => {
+const shutdown = async () => {
   console.log("Shutting down bot...");
   try {
     // Call cleanup and await if it returns a Promise
@@ -51,7 +55,9 @@ process.on("SIGINT", async () => {
     console.error("Error during cleanup:", e && e.stack ? e.stack : e);
   }
   process.exit(0);
-});
+};
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 process.on("unhandledRejection", (error) => {
   console.error("Unhandled promise rejection:", error && error.stack ? error.stack : error);
